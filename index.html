@@ -179,7 +179,7 @@ function fmtD(ds){
 }
 function setHead(){
   $('hName').textContent=CL.name||'متابعة العيادة';
-  $('hSub').textContent=CL.doctor||'';
+  $('hSub').textContent=CL.center? 'متابعة المدير — كل الدكاترة' : (CL.doctor||'');
   document.title=(CL.name||'متابعة العيادة');
 }
 function saveCL(c){ if(!c) return; CL=c; try{ localStorage.setItem('fc:'+S,JSON.stringify(c)); }catch(e){} setHead(); }
@@ -194,7 +194,7 @@ function hello(){
     if(!d.ok){ lockScr('<h2>مش قادر أوصل للعيادة</h2><p>'+esc(ERR[d.e]||ERR.net)+'</p><button class="btn" id="re">حاول تاني</button>'); $('re').onclick=hello; return; }
     saveCL(d.cl);
     if(TK){ start(); return; }
-    var first=!d.hasPw, hi='أهلًا يا '+(CL.doctor? esc(CL.doctor) : M('دكتور','دكتورة'));
+    var first=!d.hasPw, hi=CL.center? 'متابعة '+esc(CL.name||'المركز') : 'أهلًا يا '+(CL.doctor? esc(CL.doctor) : M('دكتور','دكتورة'));
     lockScr('<h2>'+hi+'</h2><p>'+(first? 'أول مرة — اعمل'+M('','ي')+' باسورد للصفحة دي. هتطلب'+M('ه','يه')+' بعد كده لو فتحت'+M('','ي')+' من موبايل تاني.'
       : 'اكتب'+M('','ي')+' الباسورد')+'</p>'+
       '<input type="password" id="p1" placeholder="الباسورد" autocomplete="'+(first?'new-password':'current-password')+'">'+
@@ -249,7 +249,8 @@ function pToday(quiet){
     if(!d.ok){ if(!quiet) failBox(d,pToday); return; }
     saveCL(d.cl);
     var day=d.day||{}, c=d.c, st, cls;
-    if(day.sorry){ st=DR()+' '+M('اعتذر','اعتذرت')+' النهارده'; cls='bad'; }
+    if(CL.center){ st= day.closed? 'اليوم اتقفل '+fmtT(day.closed) : day.open? 'المركز شغال من '+fmtT(day.open) : 'اليوم لسه ما بدأش'; cls= day.open&&!day.closed? 'ok' : ''; }
+    else if(day.sorry){ st=DR()+' '+M('اعتذر','اعتذرت')+' النهارده'; cls='bad'; }
     else if(day.left){ st=DR()+' '+M('انصرف','انصرفت')+' '+fmtT(day.left); cls=''; }
     else if(day.arr){ st=DR()+' '+M('موجود','موجودة')+' من '+fmtT(day.arr); cls='ok'; }
     else if(day.open){ st='اليوم شغال — '+DR()+' لسه ما '+M('وصلش','وصلتش'); cls='warn'; }
@@ -266,7 +267,7 @@ function pToday(quiet){
     if(!L.length) h+='<div class="empty">مفيش حجوزات النهارده لسه</div>';
     L.forEach(function(b){
       var t=b.st==='in'?'دخل '+fmtT(b.en): b.st==='done'?'خرج '+fmtT(b.out): b.st==='here'?'حضر '+fmtT(b.ck):'';
-      h+='<div class="row"><div class="nm"><b>'+esc(b.name)+'</b><small>'+esc(b.type)+(b.price?' · '+money(b.price):'')+(t?' · '+t:'')+
+      h+='<div class="row"><div class="nm"><b>'+esc(b.name)+'</b><small>'+(b.dr?'<b>'+esc(b.dr)+'</b> · ':'')+esc(b.type)+(b.price?' · '+money(b.price):'')+(t?' · '+t:'')+
         (dx[b.pid]?'<br>التشخيص: '+esc(dx[b.pid]):'')+(b.notes?'<br>'+esc(b.notes):'')+'</small></div><span class="pill s-'+b.st+'">'+esc(ST[b.st]||b.st)+'</span></div>';
     });
     h+='</div>';
@@ -304,6 +305,7 @@ function pRep(){
       if(d.days.length>1){
         h+='<div class="card"><h3>كل يوم<span class="x"><span class="tog"><button data-m="c" class="'+(RP.m==='c'?'on':'')+'">العدد</button><button data-m="r" class="'+(RP.m==='r'?'on':'')+'">الإيراد</button></span></span></h3><div id="ch"></div></div>';
       }
+      if(d.drs && d.drs.length>1) h+='<div class="card"><h3>الدكاترة</h3>'+bars(d.drs.map(function(s){ return {n:s.n,c:s.rev,t:num(s.c)+' مريض · '+money(s.rev)}; }))+'</div>';
       h+='<div class="card"><h3>الخدمات</h3>'+(d.svc.length? bars(d.svc.map(function(s){ return {n:s.n,c:s.c,t:num(s.c)+(s.rev?' · '+money(s.rev):'')}; })) : '<div class="empty">مفيش</div>')+'</div>';
       [['أكتر التشخيصات',d.dx],['أكتر الأدوية',d.meds],['أكتر التحاليل',d.labs]].forEach(function(x){
         h+='<div class="card"><h3>'+x[0]+'</h3>'+(x[1].length? bars(x[1].map(function(s){ return {n:s.n,c:s.c,t:num(s.c)+' مرة'}; })) : '<div class="empty">مفيش</div>')+'</div>';
