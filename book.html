@@ -55,7 +55,23 @@ var $=function(id){ return document.getElementById(id); };
 var esc=function(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
 var DAYS=['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'], MON=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 var ERR={off:'الحجز الأونلاين مقفول دلوقتي',name:'اكتب الاسم بالكامل',phone:'رقم التليفون لازم ١١ رقم ويبدأ بـ 01',dr:'اختار الدكتور',date:'اختار يوم من الأيام المتاحة',
-  svc:'اختار الخدمة',many:'عملت طلبات كتير — كلّم العيادة',dup:'إنت حاجز في اليوم ده قبل كده — استنى رد العيادة',busy:'جرّب تاني بعد شوية',net:'مفيش نت أو الصفحة مش بترد — جرّب تاني'};
+  svc:'اختار الخدمة',many:'عملت طلبات كتير — كلّم العيادة',dup:'إنت حاجز في اليوم ده قبل كده — استنى رد العيادة',busy:'جرّب تاني بعد شوية',net:'مفيش نت أو الصفحة مش بترد — جرّب تاني',
+  closed:'الحجز الأونلاين مقفول دلوقتي'};
+/* ليه الحجز مقفول دلوقتي — رسالة للمريض */
+function whyText(d){
+  var f=d&&d.from, t=d&&d.to;
+  switch(d&&d.why){
+    case 'off': return 'الحجز الأونلاين مقفول دلوقتي.';
+    case 'offline': return 'العيادة مش متصلة بالنت دلوقتي — جرّب تاني بعد شوية.';
+    case 'notstarted': return 'العيادة لسه ما فتحتش النهاردة — الحجز الأونلاين بيفتح مع بداية العمل.';
+    case 'closed': return 'العيادة قفلت شغل النهاردة.';
+    case 'sorry': return 'الدكتورة اعتذرت عن باقي النهاردة.';
+    case 'early': return 'الحجز الأونلاين بيفتح الساعة '+hm(f)+'.';
+    case 'late': return 'الحجز الأونلاين النهاردة اتقفل الساعة '+hm(t)+'.';
+    default: return 'الحجز الأونلاين مقفول دلوقتي.';
+  }
+}
+function hm(s){ var m=String(s||'').match(/^(\d{1,2}):(\d{2})/); if(!m) return s||''; var h=+m[1]; return (h%12||12)+':'+m[2]+(h<12?' ص':' م'); }
 function call(o,cb){
   var done=false, t=setTimeout(function(){ if(!done){ done=true; cb({ok:0,e:'net'}); } },40000);
   fetch(EXEC,{method:'POST',body:JSON.stringify(o),headers:{'Content-Type':'text/plain;charset=utf-8'}})
@@ -74,6 +90,9 @@ call({a:'obinfo'},function(d){
   $('hN').textContent=cl.name||'احجز ميعادك'; $('hS').textContent=(cl.phone?'تليفون العيادة '+cl.phone:'')+(cl.addr?' · '+cl.addr:'');
   document.title='احجز — '+(cl.name||'');
   if(!d.on){ $('main').innerHTML='<div class="done"><div class="ic">🕘</div><b>الحجز الأونلاين مقفول دلوقتي</b>'+(cl.phone?'<p class="meta">احجز بالتليفون: <a href="tel:'+esc(cl.phone)+'" dir="ltr">'+esc(cl.phone)+'</a></p>':'')+'</div>'; return; }
+  if(!d.open){ $('main').innerHTML='<div class="done"><div class="ic">🕘</div><b>'+esc(whyText(d))+'</b>'+
+    (cl.phone?'<p class="meta">تقدر تحجز بالتليفون: <a href="tel:'+esc(cl.phone)+'" dir="ltr">'+esc(cl.phone)+'</a></p>':'')+
+    '<p class="meta" style="margin-top:6px">ولو عندك حجز قبل كده، تابعه من تحت 👇</p></div>'; return; }
   if(d.docs.length===1) PICK.dr=d.docs[0].id;
   draw();
 });
@@ -110,28 +129,82 @@ function send(){
   var ph=$('fP').value.replace(/[٠-٩]/g,function(x){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(x); }).replace(/\D/g,'');
   b.disabled=true; e.textContent='';
   call({a:'obook',dr:PICK.dr,svc:PICK.svc,date:PICK.date,name:$('fN').value,phone:ph,note:$('fO').value},function(d){
-    b.disabled=false;
-    if(!d.ok){ e.textContent=ERR[d.e]||ERR.net; return; }
+    if(!d.ok){
+      b.disabled=false;
+      if(d.e==='closed'){ e.textContent=whyText(d); return; }
+      e.textContent=ERR[d.e]||ERR.net; return;
+    }
     try{ localStorage.setItem('obph',ph); }catch(x){} $('tP').value=ph;
-    $('main').innerHTML='<div class="done"><div class="ic">✅</div><b>طلبك وصل للعيادة</b><p>'+esc(D.name)+' · '+(PICK.svc?esc(PICK.svc)+' · ':'')+dl(PICK.date)+'</p>'+
-      '<p class="meta">العيادة هتأكد الحجز وتديك رقمك. تابع الرد من «تابع حجزك» تحت.</p><button class="btn out" id="again">حجز تاني</button></div>';
-    $('again').onclick=function(){ PICK.date=''; PICK.svc=''; draw(); };
-    track();
+    /* الطلب اتكتب في الشيت — بس ما نقولش «وصل» غير لما جهاز العيادة يستقبله فعلاً */
+    $('main').innerHTML='<div class="done"><div class="ic">⏳</div><b>بنبعت طلبك للعيادة…</b><p class="meta">ثانية واحدة — بنتأكد إن العيادة استقبلته.</p></div>';
+    waitSeen(d.id, D, PICK.svc, PICK.date, ph);
   });
 }
-function track(){
+/* نفضل نسأل الشيت: جهاز العيادة شاف الطلب؟ لو ما شفهوش خلال المهلة → حاول تاني */
+function waitSeen(id, D, svc, date, ph){
+  var tries=0, max=20;   /* ~40 ثانية */
+  var ask=function(){
+    call({a:'obseen',id:id},function(d){
+      if(d && d.ok && d.seen){
+        $('main').innerHTML='<div class="done"><div class="ic">✅</div><b>طلبك وصل للعيادة</b><p>'+esc(D.name)+' · '+(svc?esc(svc)+' · ':'')+dl(date)+'</p>'+
+          '<p class="meta">العيادة هتأكد الحجز وتديك رقمك. تابع الرد من «تابع حجزك» تحت.</p><button class="btn out" id="again">حجز تاني</button></div>';
+        $('again').onclick=function(){ PICK.date=''; PICK.svc=''; draw(); };
+        track(); return;
+      }
+      if(++tries>=max){
+        $('main').innerHTML='<div class="done"><div class="ic">⚠️</div><b>العيادة مش مستقبلة دلوقتي</b>'+
+          '<p class="meta">طلبك ما وصلش لجهاز العيادة. ده بيحصل لو النت فصل عندهم. جرّب تاني بعد شوية'+
+          ((INFO&&INFO.cl&&INFO.cl.phone)?' أو احجز بالتليفون <a href="tel:'+esc(INFO.cl.phone)+'" dir="ltr">'+esc(INFO.cl.phone)+'</a>':'')+'.</p>'+
+          '<button class="btn" id="retry">حاول تاني</button> <button class="btn out" id="again">رجوع</button></div>';
+        $('retry').onclick=function(){ draw(); setTimeout(send,30); };
+        $('again').onclick=function(){ PICK.date=''; PICK.svc=''; draw(); };
+        return;
+      }
+      setTimeout(ask,2000);
+    });
+  };
+  ask();
+}
+function track(silent){
   var ph=$('tP').value.replace(/\D/g,''); if(!ph) return;
-  $('tOut').innerHTML='<div class="ld">بدوّر…</div>';
+  if(silent!==1) $('tOut').innerHTML='<div class="ld">بدوّر…</div>';
   call({a:'obtrack',phone:ph},function(d){
     if(!d.ok){ $('tOut').innerHTML='<div class="err">'+esc(ERR[d.e]||ERR.net)+'</div>'; return; }
     try{ localStorage.setItem('obph',ph); }catch(x){}
-    $('tOut').innerHTML= d.list.length? d.list.map(function(x){ var c=x.st==='اتأكد'?'p-ok':(x.st==='اترفض'||x.st==='اتلغى')?'p-no':'p-new';
-      return '<div class="tr"><div style="flex:1"><b>'+esc(x.name)+'</b><div class="meta">'+esc(x.dr)+(x.svc?' · '+esc(x.svc):'')+' · '+dl(x.date)+'</div>'+
-        (x.msg?'<div style="font-size:14px">'+esc(x.msg)+'</div>':'')+'</div><span class="pill '+c+'">'+esc(x.st==='جديد'?'مستني رد العيادة':x.st)+(x.num&&x.st==='اتأكد'?' · رقم '+esc(x.num):'')+'</span></div>'; }).join('')
-      : '<p class="meta" style="margin-top:8px">مفيش حجوزات على الرقم ده.</p>';
+    $('tOut').innerHTML= d.list.length? d.list.map(trCard).join('')
+      : '<p class="meta" style="margin-top:8px">مفيش حجوزات على الرقم ده. لو لسه باعت الطلب دلوقتي، استنى ثانية وحدّث.</p>';
   });
 }
+function trCard(x){
+  var st=x.st, c= st==='اتأكد'?'p-ok':(st==='اترفض'||st==='اتلغى')?'p-no':'p-new';
+  var lbl= st==='جديد'? (x.seen?'العيادة شافت طلبك — مستني التأكيد':'بيوصل للعيادة…') : st;
+  var head='<div class="tr"><div style="flex:1"><b>'+esc(x.name)+'</b><div class="meta">'+esc(x.drn||'')+(x.svc?' · '+esc(x.svc):'')+' · '+dl(x.date)+'</div>'+
+    (x.msg?'<div style="font-size:14px">'+esc(x.msg)+'</div>':'')+'</div><span class="pill '+c+'">'+esc(lbl)+(x.num&&st==='اتأكد'?' · رقمك '+esc(x.num):'')+'</span></div>';
+  if(st==='اتأكد' && x.live) head+=liveBox(x.live, x.num);
+  return head;
+}
+/* صندوق المتابعة الحية: الدكتورة وصلت؟ وقدامك كام دور؟ */
+function liveBox(v, num){
+  var rows=[], arrTxt;
+  if(v.sorry) arrTxt='🔴 الدكتورة اعتذرت النهاردة';
+  else if(v.left) arrTxt='⚪ الدكتورة انصرفت';
+  else if(v.arr) arrTxt='🟢 الدكتورة موجودة — وصلت '+hm(v.arr);
+  else arrTxt='🟡 الدكتورة لسه ما وصلتش';
+  rows.push(arrTxt);
+  if(v.mine==='جوه') rows.push('🔵 <b>دورك دلوقتي — اتفضل للدكتورة</b>');
+  else if(v.mine==='خرج' || v.mine==='ما حضرش') rows.push('تم الكشف');
+  else if(v.arr && !v.left && !v.sorry){
+    if(v.ahead<=0) rows.push('✅ إنت التالي');
+    else rows.push('⏳ قدامك <b>'+v.ahead+'</b> '+(v.ahead===1?'واحد':v.ahead===2?'اتنين':'أشخاص'));
+    if(v.serving) rows.push('<span class="meta">دلوقتي بيكشف رقم '+v.serving+'</span>');
+  } else if(!v.arr && !v.sorry){
+    rows.push('<span class="meta">قدامك '+v.ahead+' قبلك — هيبدأوا أول ما الدكتورة توصل</span>');
+  }
+  return '<div class="note" style="margin:0 0 10px">'+rows.join('<br>')+'</div>';
+}
 $('tGo').onclick=track;
+/* رد العيادة بيظهر لوحده: بنعيد السؤال كل ٣٠ ثانية طول ما الصفحة مفتوحة وفيه رقم متكتب */
+setInterval(function(){ if(!document.hidden && $('tP') && $('tP').value.replace(/\D/g,'') && $('tOut') && $('tOut').innerHTML) track(1); },30000);
 })();
 </script>
 </body>
